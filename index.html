@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A garden of reaction–diffusion — The Lab</title>
+  <meta name="description" content="Paint chemicals into a live Gray–Scott reaction–diffusion field and watch Turing patterns grow — spots, mazes, coral, fingerprints. WebGL, zero dependencies." />
+  <link rel="stylesheet" href="lab.css" />
+  <style>
+    :root { --accent:#2fd6c3; --accent-soft:#123f3a; --accent-ink:#04110f; }
+
+    .rd-stagewrap { position: relative; }
+    /* the stage holds the canvas edge-to-edge; padding trimmed vs default */
+    .rd-stage {
+      padding: 0; position: relative; overflow: hidden;
+      border-radius: var(--r-lg);
+      background: #04110f;
+    }
+    #rd-canvas {
+      display: block; width: 100%; height: auto; aspect-ratio: 3 / 2;
+      border-radius: var(--r-lg);
+      cursor: crosshair; touch-action: none;
+    }
+    /* graceful-failure overlay */
+    .rd-fallback {
+      display: none; padding: 48px 32px; text-align: center;
+      color: var(--ink-soft); font-size: 16px; line-height: 1.6;
+    }
+    .rd-fallback.show { display: block; }
+    .rd-fallback b { color: var(--ink); }
+
+    /* floating hint over the canvas */
+    .rd-hint {
+      position: absolute; left: 14px; bottom: 12px; z-index: 3;
+      font-family: var(--mono); font-size: 12px; color: var(--ink-soft);
+      background: color-mix(in oklab, #04110f 72%, transparent);
+      border: 1px solid var(--line); border-radius: 8px;
+      padding: 6px 10px; pointer-events: none;
+      backdrop-filter: blur(6px);
+      transition: opacity .4s; opacity: 1;
+    }
+    .rd-hint.fade { opacity: 0; }
+    .rd-hint b { color: var(--accent); }
+
+    /* controls layout */
+    .rd-controls { margin-top: 20px; display: flex; flex-direction: column; gap: 18px; }
+    .rd-row { display: flex; flex-wrap: wrap; gap: 16px 22px; align-items: flex-end; }
+    .rd-sliders { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 16px 22px; flex: 1 1 460px; }
+    @media (max-width: 620px) { .rd-sliders { grid-template-columns: 1fr 1fr; } }
+    .rd-field { display: flex; flex-direction: column; gap: 7px; }
+    .rd-field > label {
+      font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--ink-mute);
+      display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+    }
+    .rd-field > label b { color: var(--accent); font-weight: 600; font-size: 12.5px; }
+    .rd-groups { display: flex; flex-wrap: wrap; gap: 16px 26px; align-items: center; }
+    .rd-groups .field { gap: 8px; }
+    .rd-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+
+    /* the parameter-space map */
+    .rd-map-wrap { display: flex; flex-direction: column; gap: 8px; }
+    .rd-map {
+      position: relative; width: 168px; height: 132px;
+      background: var(--surface-2);
+      border: 1px solid var(--line-2); border-radius: 10px;
+      cursor: crosshair; touch-action: none; overflow: hidden;
+    }
+    .rd-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 9px; }
+    .rd-map .dot {
+      position: absolute; width: 12px; height: 12px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--accent-ink);
+      box-shadow: 0 0 0 1px var(--accent), 0 2px 6px rgba(0,0,0,.6);
+      transform: translate(-50%, -50%); pointer-events: none;
+    }
+    .rd-map-cap { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); letter-spacing: .06em; }
+
+    .chip[aria-pressed="true"] { color: var(--accent-ink); }
+    .rd-legendline { font-family: var(--mono); font-size: 12px; color: var(--ink-mute); }
+    .rd-legendline b { color: var(--ink); }
+  </style>
+</head>
+<body>
+  <nav class="labnav">
+    <div class="wrap">
+      <a class="brand" href="https://github.com/moshejs"><span class="dot"></span> The Lab</a>
+      <span class="spacer"></span>
+      <a class="navlink" href="https://github.com/moshejs/reaction-diffusion">Source ↗</a>
+    </div>
+  </nav>
+
+  <header class="exhead wrap">
+    <span class="eyebrow">Exhibit 04 · Emergence</span>
+    <h1 class="title">A garden of reaction–diffusion</h1>
+    <p class="dek">Two make-believe chemicals, one simple rule, and a whole zoo of living patterns. Paint into the field and watch it grow.</p>
+  </header>
+
+  <main class="wrap">
+    <div class="metastrip">
+      <span><b>WebGL</b> Gray–Scott</span>
+      <span><b>GPU</b> ping-pong framebuffers</span>
+      <span><b>Turing</b> morphogenesis, 1952</span>
+      <span><b>0</b> dependencies</span>
+    </div>
+
+    <section class="read prose stack">
+      <p>Nothing here is choreographed. There's no bitmap of spots waiting to be revealed — just two imaginary chemicals sloshing around a grid, following one short equation, painted onto the screen a few thousand times a second by your GPU. Spots, stripes, mazes, and dividing cells all fall out of the <strong>same rule</strong>; the only difference is how fast one chemical is fed and the other killed.</p>
+      <p>Drag on the canvas to squirt chemical into the field, then nudge the sliders and watch the whole regime tip from coral to fingerprints. This is Alan Turing's 1952 idea, running live.</p>
+    </section>
+
+    <!-- ============ THE INTERACTIVE ============ -->
+    <section style="margin: 34px 0 10px;">
+      <div class="panel rd-stagewrap" style="padding: 16px;">
+        <div class="stage rd-stage">
+          <canvas id="rd-canvas" width="768" height="512" aria-label="Reaction–diffusion field — drag to paint"></canvas>
+          <div class="rd-hint" id="rd-hint"><b>Drag</b> anywhere to paint chemical into the field</div>
+          <div class="rd-fallback" id="rd-fallback">
+            <p><b>This exhibit needs WebGL.</b></p>
+            <p>Your browser or device didn't hand us a working WebGL context, so the live simulation can't run here. Try a recent version of Chrome, Firefox, Safari, or Edge on a device with hardware acceleration enabled.</p>
+          </div>
+        </div>
+
+        <div class="rd-controls" id="rd-controls">
+          <div class="rd-sliders">
+            <div class="rd-field">
+              <label for="rd-feed">Feed rate <b id="rd-feed-val">0.0545</b></label>
+              <input id="rd-feed" type="range" min="0.010" max="0.090" step="0.0001" value="0.0545" />
+            </div>
+            <div class="rd-field">
+              <label for="rd-kill">Kill rate <b id="rd-kill-val">0.0620</b></label>
+              <input id="rd-kill" type="range" min="0.045" max="0.070" step="0.0001" value="0.0620" />
+            </div>
+            <div class="rd-field">
+              <label for="rd-brush">Brush size <b id="rd-brush-val">28 px</b></label>
+              <input id="rd-brush" type="range" min="6" max="70" step="1" value="28" />
+            </div>
+          </div>
+
+          <div class="rd-row">
+            <div class="rd-groups">
+              <div class="field">
+                <label>Preset regime</label>
+                <div class="chips" id="rd-presets" role="group" aria-label="Gray–Scott preset">
+                  <span class="chip" data-preset="coral"       aria-pressed="true"  title="f 0.0545 · k 0.0620">Coral</span>
+                  <span class="chip" data-preset="mitosis"     aria-pressed="false" title="f 0.0367 · k 0.0649">Mitosis</span>
+                  <span class="chip" data-preset="worms"       aria-pressed="false" title="f 0.0580 · k 0.0650">Spots &amp; worms</span>
+                  <span class="chip" data-preset="maze"        aria-pressed="false" title="f 0.0290 · k 0.0570">Maze</span>
+                  <span class="chip" data-preset="fingerprint" aria-pressed="false" title="f 0.0370 · k 0.0600">Fingerprint</span>
+                </div>
+              </div>
+
+              <div class="field">
+                <label>Palette</label>
+                <div class="chips" id="rd-palettes" role="group" aria-label="Colour palette">
+                  <span class="chip" data-pal="lagoon" aria-pressed="true">Lagoon</span>
+                  <span class="chip" data-pal="ember"  aria-pressed="false">Ember</span>
+                  <span class="chip" data-pal="mono"   aria-pressed="false">Ink</span>
+                  <span class="chip" data-pal="bio"    aria-pressed="false">Bio</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="rd-map-wrap">
+              <div class="rd-map" id="rd-map" title="Drag to explore feed × kill space">
+                <canvas id="rd-map-canvas" width="168" height="132"></canvas>
+                <div class="dot" id="rd-map-dot"></div>
+              </div>
+              <span class="rd-map-cap">feed → · kill ↑ · drag to explore</span>
+            </div>
+          </div>
+
+          <div class="rd-row" style="justify-content: space-between;">
+            <div class="rd-buttons">
+              <button class="btn" id="rd-seed">✦ Seed random</button>
+              <button class="btn" id="rd-clear">Clear</button>
+              <button class="btn primary" id="rd-pause">❚❚ Pause</button>
+            </div>
+            <span class="rd-legendline" id="rd-status">simulating <b>256×256</b> cells · <b>16</b> steps / frame</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ THE EXPLAINER ============ -->
+    <section class="read prose stack" style="margin-top: 46px;">
+      <h2>Two chemicals and one honest rule</h2>
+      <p>Imagine a shallow dish coated with two dissolved chemicals, <strong>U</strong> and <strong>V</strong>. Three things happen everywhere at once. First, both chemicals <strong>diffuse</strong> — they spread out from where they're dense toward where they're thin, U roughly twice as fast as V. Second, they <strong>react</strong>: wherever a unit of U meets two units of V, all three become more V. So V is autocatalytic — it eats U to make copies of itself. Left alone, V would run away and consume everything.</p>
+      <p>Two more terms keep it honest. Fresh U is constantly <strong>fed</strong> in at a rate <code>f</code>, topping up the fuel. And V is constantly <strong>killed</strong> off — removed at a rate <code>f+k</code>. Feed too little or kill too much and V starves out to a blank field; feed too much and it floods. Between those extremes lies a narrow, fertile band where V can't quite win and can't quite lose — and that tension is where patterns live.</p>
+
+      <h2>Why it doesn't just blur into mush</h2>
+      <p>Diffusion, on its own, only ever smooths things out. The magic is the <strong>difference in diffusion speeds</strong>. V catalyzes itself locally, building a spot; but the U it consumes is replenished from farther away more slowly than V spreads, so a ring of exhausted, V-hostile territory forms around each spot. That's <strong>short-range activation, long-range inhibition</strong> — a spot that grows itself while forbidding its neighbours. Repeat it across the whole dish and you get evenly spaced dots, or, if the geometry favours it, stripes and labyrinths.</p>
+      <p>This is exactly the mechanism Alan Turing proposed in his 1952 paper <em>The Chemical Basis of Morphogenesis</em> — his last great idea before his death. He argued that an embryo, starting as a nearly uniform blob, could break its own symmetry into structure using nothing but reacting, diffusing <em>morphogens</em>. It was pure math decades ahead of the biology; only much later did researchers find real Turing-like systems setting the spacing of hair follicles, the ridges of your palate, the stripes on a fish.</p>
+
+      <h2>The map you're standing on</h2>
+      <p>The little <b>feed × kill</b> plot next to the sliders isn't decoration — it's the atlas. In 1993 John Pearson swept this exact plane and found it carved into more than a dozen distinct regimes, each with a Greek-letter name. The presets drop you onto the famous ones: <strong>Coral</strong> creeps outward in branching reefs; <strong>Mitosis</strong> grows spots that swell and split like dividing cells; <strong>Maze</strong> freezes into a labyrinth of even-width corridors; <strong>Fingerprint</strong> settles into looping ridges; <strong>Spots &amp; worms</strong> can't decide and does both at once. Slide a few thousandths in either direction and the whole character of the field changes — the borders between regimes are that sharp.</p>
+
+      <h2>Where it shows up</h2>
+      <p>Once you've watched it run, you start seeing it everywhere: the spots on a leopard and the stripes on a zebrafish, the ridges inside a seashell, the branching of coral and lichen, the spacing of sand ripples, the pigment blotches on a pufferfish. Nature reruns this same short-range-yes, long-range-no bargain at wildly different scales. What you're painting on this page is a caricature of the real chemistry — but the family resemblance is the whole point.</p>
+    </section>
+
+    <section class="read" style="margin-top:40px;">
+      <div class="panel" style="padding:20px 22px;">
+        <div class="mono" style="font-size:12.5px; letter-spacing:.08em; color:var(--ink-mute); margin-bottom:8px;">TRY THIS</div>
+        <div class="prose" style="color:var(--ink-soft)">
+          Load <b>Mitosis</b>, hit <b>Clear</b>, then paint a single small blob in the middle and let it sit. Watch one spot become two, two become four. Now, while it's dividing, drag the <b>kill</b> slider up by a hair — the cells stop splitting and freeze into a coral crust. Same field, different physics.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="labfoot">
+    <div class="wrap">
+      <span>The Lab — handmade interactive explainers.</span>
+      <span class="spacer" style="flex:1"></span>
+      <a href="https://github.com/moshejs/reaction-diffusion">Source ↗</a>
+    </div>
+  </footer>
+
+  <script src="diffusion.js"></script>
+</body>
+</html>
