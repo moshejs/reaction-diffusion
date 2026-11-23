@@ -1,0 +1,47 @@
+{
+  "name": "@moshejs/reaction-diffusion-react",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A self-contained React component for the Gray-Scott reaction-diffusion shader from A garden of reaction-diffusion. Raw WebGL, no dependencies beyond React.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./engine": {
+      "types": "./src/engine.d.ts",
+      "default": "./src/engine.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.engine.json",
+    "demo:build": "node scripts/build-demo.mjs",
+    "demo": "node scripts/build-demo.mjs --serve",
+    "test:browser": "node scripts/build-demo.mjs && node scripts/browser-check.mjs",
+    "check": "npm run typecheck && npm test && npm run test:browser"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "playwright": "^1.65.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2"
+  }
+}

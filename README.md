@@ -24,6 +24,16 @@ Vanilla HTML/CSS/JS + WebGL, **zero dependencies**. Ping-pong framebuffers, a Gr
 fragment shader, runtime probing for float-texture support (half-float → float → 8-bit
 packed fallback), and a display pass that maps concentration through a palette.
 
+The renderer lives in [`component/src/engine.js`](component/src/engine.js); `diffusion.js`
+wires the page's controls to it. No build step: the page loads both as ES modules.
+
+## React component
+
+The same shader is packaged as a React component in [`component/`](component/README.md):
+props for feed, kill, diffusion, speed, palette, resolution and seed, a static fallback,
+reduced-motion support and full GPU cleanup on unmount. It is private and not published;
+the README there covers installing it from source.
+
 Part of [The Lab](https://github.com/moshejs) — handmade interactive explainers.
 
 ## License
